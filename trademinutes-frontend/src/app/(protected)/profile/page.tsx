@@ -22,24 +22,28 @@ export default function UserProfileSummaryPage() {
   const router = useRouter();
 
   useEffect(() => {
+    // Restore theme preference
     const savedTheme = localStorage.getItem("theme");
     setIsDarkMode(savedTheme === "dark");
 
+    // Validate token
     const token = localStorage.getItem("token");
     if (!token) {
       router.push("/login");
       return;
     }
 
+    // Async fetch user profile
     const fetchProfile = async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_AUTH_API_URL}/api/auth/profile`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/auth/profile`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
         );
-
+      
+        // Basic content-type guard
         const contentType = res.headers.get("content-type") || "";
         if (!contentType.includes("application/json")) {
           throw new Error("Invalid response format");
@@ -48,6 +52,7 @@ export default function UserProfileSummaryPage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || "Failed to fetch profile");
 
+        // Save profile to state
         setProfile(data);
       } catch (err) {
         console.error("Failed to fetch profile:", err);
@@ -114,7 +119,7 @@ export default function UserProfileSummaryPage() {
                 Year: {profile.YearOfStudy || "Not specified"}
               </p>
               <p className="text-sm text-gray-500 mb-2">
-                Email: {profile.Email}
+                Email: {profile.email}
               </p>
               {profile.skills && profile.skills.length > 0 && (
                 <div className="mt-4">

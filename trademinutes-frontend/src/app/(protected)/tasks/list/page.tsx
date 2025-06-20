@@ -48,11 +48,11 @@ export default function TaskListPage() {
   const [loading, setLoading] = useState(true);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<number | null>(null);
+  const [token, setToken] = useState<string | null>(null);
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_TASK_API_URL || "http://localhost:8084";
 
   const fetchTasks = () => {
-    const token = localStorage.getItem("token");
     if (!token) return;
 
     fetch(`${API_BASE_URL}/api/tasks/get/user`, {
@@ -72,9 +72,7 @@ export default function TaskListPage() {
   };
 
   const handleDelete = async () => {
-    if (!taskToDelete) return;
-    const token = localStorage.getItem("token");
-    if (!token) return;
+    if (!taskToDelete || !token) return;
 
     try {
       const res = await fetch(
@@ -104,8 +102,16 @@ export default function TaskListPage() {
   };
 
   useEffect(() => {
-    fetchTasks();
+    // Get token on client side only
+    const userToken = localStorage.getItem("token");
+    setToken(userToken);
   }, []);
+
+  useEffect(() => {
+    if (token) {
+      fetchTasks();
+    }
+  }, [token]);
 
   return (
     <ProtectedLayout>
@@ -149,8 +155,8 @@ export default function TaskListPage() {
                 {task.availability?.length > 0 && (
                   <p className="text-xs text-gray-500 mb-1">
                     📅 {task.availability[0].date} — ⏰{" "}
-                    {task.availability[0].TimeFrom} to{" "}
-                    {task.availability[0].TimeTo}
+                    {task.availability[0].timeFrom} to{" "}
+                    {task.availability[0].timeTo}
                   </p>
                 )}
                 <p className="text-sm font-medium text-gray-700">

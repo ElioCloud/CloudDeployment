@@ -142,7 +142,7 @@ export default function ProfileDashboardPage() {
     const fetchProfile = async () => {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_AUTH_API_URL}/api/auth/profile`,
+          `${process.env.NEXT_PUBLIC_API_URL}/api/auth/profile`,
           {
             headers: { Authorization: `Bearer ${token}` },
           }
@@ -163,55 +163,41 @@ export default function ProfileDashboardPage() {
 
         // Handle case-sensitive field names from API
         const profileData = {
-          university:
-            data.university ||
-            data.University ||
-            data.college ||
-            data.College ||
-            "",
-          program:
-            data.program || data.Program || data.major || data.Major || "",
-          yearOfStudy:
-            data.yearOfStudy ||
-            data.YearOfStudy ||
-            data.year ||
-            data.Year ||
-            "",
+          university: data.university || data.University || data.college || data.College || "",
+          program: data.program || data.Program || data.major || data.Major || "",
+          yearOfStudy: data.yearOfStudy || data.YearOfStudy || data.year || data.Year || ""
         };
 
         // Check if the fields exist and are not empty strings
-        const hasUniversity =
-          profileData.university && profileData.university.trim() !== "";
-        const hasProgram =
-          profileData.program && profileData.program.trim() !== "";
-        const hasYearOfStudy =
-          profileData.yearOfStudy && profileData.yearOfStudy.trim() !== "";
+        const hasUniversity = profileData.university && profileData.university.trim() !== "";
+        const hasProgram = profileData.program && profileData.program.trim() !== "";
+        const hasYearOfStudy = profileData.yearOfStudy && profileData.yearOfStudy.trim() !== "";
 
         console.log("Processed field values:", profileData);
 
         console.log("Field status:", {
           hasUniversity,
           hasProgram,
-          hasYearOfStudy,
+          hasYearOfStudy
         });
 
         setProfile({
           ...data,
           university: profileData.university,
           program: profileData.program,
-          yearOfStudy: profileData.yearOfStudy,
+          yearOfStudy: profileData.yearOfStudy
         });
 
         // Only show dialog if any required field is missing or empty
         if (!hasUniversity || !hasProgram || !hasYearOfStudy) {
           console.log("Showing profile dialog - Missing fields detected");
           setShowProfileDialog(true);
-          setFormData((prev) => ({
+          setFormData(prev => ({
             ...prev,
             university: profileData.university.trim(),
             program: profileData.program.trim(),
             yearOfStudy: profileData.yearOfStudy.trim(),
-            skills: Array.isArray(data.skills) ? data.skills : [],
+            skills: Array.isArray(data.skills) ? data.skills : []
           }));
         } else {
           console.log("All fields present - Not showing dialog");
@@ -259,10 +245,10 @@ export default function ProfileDashboardPage() {
                 }`}
               >
                 <h2 className="text-lg font-semibold mb-4">
-                  Welcome, {profile.Name}
+                  Welcome, {profile.name}
                 </h2>
                 <p className="text-sm mb-2">
-                  Email: <span className="font-medium">{profile.Email}</span>
+                  Email: <span className="font-medium">{profile.email}</span>
                 </p>
                 <p className="text-sm text-gray-500 dark:text-gray-400">
                   Your dashboard metrics will appear below.

@@ -96,8 +96,15 @@ const avatarIcon = (url: string) =>
 
 export default function UsersNearby() {
   const [center, setCenter] = useState<LatLngExpression>([43.6532, -79.3832]);
+  const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+    
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => setCenter([pos.coords.latitude, pos.coords.longitude]),
@@ -105,7 +112,15 @@ export default function UsersNearby() {
         { enableHighAccuracy: true, timeout: 5000 }
       );
     }
-  }, []);
+  }, [isClient]);
+
+  if (!isClient) {
+    return (
+      <div className="w-full h-[70vh] rounded-xl overflow-hidden bg-gray-100 flex items-center justify-center">
+        <div className="text-center text-gray-600">Loading map...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-[70vh] rounded-xl overflow-hidden">

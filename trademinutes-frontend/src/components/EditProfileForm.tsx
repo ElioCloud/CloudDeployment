@@ -16,7 +16,7 @@ const schema = z.object({
 type FormData = {
   name: string;
   password: string;
-  avatar: FileList;
+  avatar?: FileList;
 };
 
 const mockUpdateProfile = async (data: { name: string; password: string; avatar?: File }) => {

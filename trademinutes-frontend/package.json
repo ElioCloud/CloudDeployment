@@ -13,6 +13,7 @@
     "@fullcalendar/react": "^6.1.17",
     "@headlessui/react": "^2.2.4",
     "@heroicons/react": "^2.2.0",
+    "@hookform/resolvers": "^5.1.1",
     "@netlify/next": "^1.4.9",
     "@radix-ui/react-slot": "^1.2.3",
     "@react-google-maps/api": "^2.20.6",
@@ -30,13 +31,15 @@
     "react": "^19.0.0",
     "react-countup": "^6.5.3",
     "react-dom": "^19.0.0",
+    "react-hook-form": "^7.58.1",
     "react-icons": "^5.5.0",
     "react-leaflet": "^5.0.0",
     "react-spring": "^10.0.1",
     "react-toastify": "^11.0.5",
     "react-tsparticles": "^2.12.2",
     "tailwind-merge": "^3.3.0",
-    "tsparticles-engine": "^2.12.0"
+    "tsparticles-engine": "^2.12.0",
+    "zod": "^3.25.67"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

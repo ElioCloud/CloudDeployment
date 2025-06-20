@@ -60,6 +60,7 @@ export default function TaskMap({ tasks }: { tasks: any[] }) {
   const [userLocation, setUserLocation] = useState<LatLngExpression | null>(
     null
   );
+  const [isClient, setIsClient] = useState(false);
 
   const normalizedTasks: Task[] = tasks
     .map((t: any) => ({
@@ -76,6 +77,12 @@ export default function TaskMap({ tasks }: { tasks: any[] }) {
     .filter((task) => task.latitude !== 0 && task.longitude !== 0);
 
   useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isClient) return;
+    
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         const coords: LatLngExpression = [
@@ -90,9 +97,9 @@ export default function TaskMap({ tasks }: { tasks: any[] }) {
       },
       { enableHighAccuracy: true }
     );
-  }, []);
+  }, [isClient]);
 
-  if (!userLocation) {
+  if (!isClient || !userLocation) {
     return (
       <div className="text-center text-gray-600">Getting your location...</div>
     );

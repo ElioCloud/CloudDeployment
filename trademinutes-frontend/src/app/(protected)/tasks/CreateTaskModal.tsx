@@ -17,24 +17,33 @@ export default function CreateTaskModal({
     title: "",
     description: "",
     location: "",
-    latitude: "",
-    longitude: "",
+    latitude: 0,
+    longitude: 0,
     locationType: "in-person",
     credits: "",
-    availability: [{ date: "", timeFrom: "", timeTo: "" }],
+    availability: [
+      {
+        date: "",
+        timeFrom: "",
+        timeTo: "",
+      },
+    ],
   });
 
   const [locationSuggestions, setLocationSuggestions] = useState<any[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState("");
-  const token = localStorage.getItem("token");
+  const [token, setToken] = useState<string | null>(null);
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_TASK_API_URL || "http://localhost:8084";
 
-  const MAPBOX_TOKEN =
-    "pk.eyJ1IjoibmVlbGFtZ2F1Y2hhbiIsImEiOiJjbWMwbzg0dXgwNGlnMmxwcmlncWVycnBnIn0.ARZnElbDY2SOiInY94w6aA";
+  const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
   useEffect(() => {
+    // Get token on client side only
+    const userToken = localStorage.getItem("token");
+    setToken(userToken);
+
     const fetchCategories = async () => {
       try {
         const res = await fetch(`${API_BASE_URL}/api/tasks/categories`, {
@@ -119,7 +128,7 @@ export default function CreateTaskModal({
     setLocationSuggestions([]);
   };
 
-  const handleAvailabilityChange = (field: string, value: string) => {
+  const handleAvailabilityChange = (field: 'date' | 'timeFrom' | 'timeTo', value: string) => {
     const updated = [...formData.availability];
     updated[0][field] = value;
     setFormData((prev) => ({ ...prev, availability: updated }));
