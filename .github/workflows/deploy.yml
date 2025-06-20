@@ -13,12 +13,11 @@ env:
   LOCATION: eastus
   ACR_NAME: trademinutesacr2
   CONTAINERAPP_ENV: trademinutes-env2
-  BACKEND_APP_NAME: trademinutes-users-api
-  FRONTEND_APP_NAME: trademinutes-frontend
 
-  NEXT_PUBLIC_AUTH_API_URL: ${{ vars.NEXT_PUBLIC_AUTH_API_URL }}
-  NEXT_PUBLIC_PROFILE_API_URL: ${{ vars.NEXT_PUBLIC_PROFILE_API_URL }}
-  NEXT_PUBLIC_TASK_API_URL: ${{ vars.NEXT_PUBLIC_TASK_API_URL }}
+  AUTH_APP_NAME: trademinutes-auth-api
+  PROFILE_APP_NAME: trademinutes-profile-api
+  TASK_APP_NAME: trademinutes-task-api
+  FRONTEND_APP_NAME: trademinutes-frontend
 
 jobs:
   deploy:
@@ -55,126 +54,97 @@ jobs:
     - name: Login to ACR
       run: az acr login --name $ACR_NAME
 
-    # ─── Build & Push Backend API ─────────────────────────────────────────────
-    - name: Build & Push users-api
+    # ─── Build & Push Auth API ──────────────────────────────
+    - name: Build & Push Auth API
       run: |
-        docker build -t $ACR_NAME.azurecr.io/users-api:${{ github.sha }} ./trademinutes-auth
-        docker push $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
+        docker build -t $ACR_NAME.azurecr.io/auth-api:${{ github.sha }} ./trademinutes-auth
+        docker push $ACR_NAME.azurecr.io/auth-api:${{ github.sha }}
 
-    # ─── Create Backend App with Dummy Vars ───────────────────────────────
-    - name: Deploy or Update Backend App
+    # ─── Deploy Auth API ────────────────────────────────────
+    - name: Deploy Auth API
       run: |
-        if az containerapp show --name $BACKEND_APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
-          echo "🔁 Backend exists. Updating..."
-          az containerapp update \
-            --name $BACKEND_APP_NAME \
-            --resource-group $RG_NAME \
-            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
-        else
-          echo "🚀 Creating backend app with placeholder vars..."
-          az containerapp create \
-            --name $BACKEND_APP_NAME \
-            --resource-group $RG_NAME \
-            --environment $CONTAINERAPP_ENV \
-            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }} \
-            --target-port 8080 \
-            --ingress external \
-            --registry-server $ACR_NAME.azurecr.io \
-            --env-vars PLACEHOLDER=1
-        fi
-
-    # ─── Set Secrets After App Exists ─────────────────────────────────────
-    - name: Push secrets to Azure Container App
-      run: |
-        az containerapp secret set \
-          --name $BACKEND_APP_NAME \
+        az containerapp up \
+          --name $AUTH_APP_NAME \
           --resource-group $RG_NAME \
-          --secrets \
-            mongo-uri='${{ secrets.MONGO_URI }}' \
-            db-name='${{ secrets.DB_NAME }}' \
-            jwt-secret='${{ secrets.JWT_SECRET }}' \
-            jwt-reset-secret='${{ secrets.JWT_RESET_SECRET }}' \
-            smtp-host='${{ secrets.SMTP_HOST }}' \
-            smtp-port='${{ secrets.SMTP_PORT }}' \
-            smtp-user='${{ secrets.SMTP_USER }}' \
-            smtp-pass='${{ secrets.SMTP_PASS }}' \
-            email-from='${{ secrets.EMAIL_FROM }}' \
-            frontend-url='${{ secrets.FRONTEND_URL }}' \
-            auth-secret='${{ secrets.AUTH_SECRET }}' \
-            auth-github-id='${{ secrets.AUTH_GITHUB_ID }}' \
-            auth-github-secret='${{ secrets.AUTH_GITHUB_SECRET }}'
+          --environment $CONTAINERAPP_ENV \
+          --image $ACR_NAME.azurecr.io/auth-api:${{ github.sha }} \
+          --target-port 8080 \
+          --ingress external \
+          --registry-server $ACR_NAME.azurecr.io
 
-    # ─── Update Backend Env Vars Using SecretRefs ─────────────────────────
-    - name: Inject secret-based env vars into backend
+    - name: Get Auth API URL
+      id: auth
       run: |
-        az containerapp update \
-          --name $BACKEND_APP_NAME \
-          --resource-group $RG_NAME \
-          --set-env-vars \
-            PORT=8080 \
-            MONGO_URI=secretref:mongo-uri \
-            DB_NAME=secretref:db-name \
-            JWT_SECRET=secretref:jwt-secret \
-            JWT_RESET_SECRET=secretref:jwt-reset-secret \
-            SMTP_HOST=secretref:smtp-host \
-            SMTP_PORT=secretref:smtp-port \
-            SMTP_USER=secretref:smtp-user \
-            SMTP_PASS=secretref:smtp-pass \
-            EMAIL_FROM=secretref:email-from \
-            FRONTEND_URL=secretref:frontend-url \
-            AUTH_SECRET=secretref:auth-secret \
-            AUTH_GITHUB_ID=secretref:auth-github-id \
-            AUTH_GITHUB_SECRET=secretref:auth-github-secret
+        AUTH_URL=$(az containerapp show --name $AUTH_APP_NAME --resource-group $RG_NAME --query properties.configuration.ingress.fqdn -o tsv)
+        echo "NEXT_PUBLIC_AUTH_API_URL=https://$AUTH_URL" >> $GITHUB_ENV
 
-    # ─── Fetch Backend URL for Frontend ───────────────────────────────────
-    - name: Get backend URL
-      id: backend
+    # ─── Build & Push Profile API ───────────────────────────
+    - name: Build & Push Profile API
       run: |
-        BACKEND_URL=$(az containerapp show \
-          --name $BACKEND_APP_NAME \
-          --resource-group $RG_NAME \
-          --query properties.configuration.ingress.fqdn -o tsv)
-        echo "API_URL=https://$BACKEND_URL" >> $GITHUB_ENV
-        echo "::notice title=Backend API URL::https://$BACKEND_URL"
+        docker build -t $ACR_NAME.azurecr.io/profile-api:${{ github.sha }} ./trademinutes-profile
+        docker push $ACR_NAME.azurecr.io/profile-api:${{ github.sha }}
 
-    # ─── Build & Push Frontend ────────────────────────────────────────────
-    - name: Build & Push frontend
+    - name: Deploy Profile API
+      run: |
+        az containerapp up \
+          --name $PROFILE_APP_NAME \
+          --resource-group $RG_NAME \
+          --environment $CONTAINERAPP_ENV \
+          --image $ACR_NAME.azurecr.io/profile-api:${{ github.sha }} \
+          --target-port 8080 \
+          --ingress external \
+          --registry-server $ACR_NAME.azurecr.io
+
+    - name: Get Profile API URL
+      id: profile
+      run: |
+        PROFILE_URL=$(az containerapp show --name $PROFILE_APP_NAME --resource-group $RG_NAME --query properties.configuration.ingress.fqdn -o tsv)
+        echo "NEXT_PUBLIC_PROFILE_API_URL=https://$PROFILE_URL" >> $GITHUB_ENV
+
+    # ─── Build & Push Task API ──────────────────────────────
+    - name: Build & Push Task API
+      run: |
+        docker build -t $ACR_NAME.azurecr.io/task-api:${{ github.sha }} ./trademinutes-task
+        docker push $ACR_NAME.azurecr.io/task-api:${{ github.sha }}
+
+    - name: Deploy Task API
+      run: |
+        az containerapp up \
+          --name $TASK_APP_NAME \
+          --resource-group $RG_NAME \
+          --environment $CONTAINERAPP_ENV \
+          --image $ACR_NAME.azurecr.io/task-api:${{ github.sha }} \
+          --target-port 8080 \
+          --ingress external \
+          --registry-server $ACR_NAME.azurecr.io
+
+    - name: Get Task API URL
+      id: task
+      run: |
+        TASK_URL=$(az containerapp show --name $TASK_APP_NAME --resource-group $RG_NAME --query properties.configuration.ingress.fqdn -o tsv)
+        echo "NEXT_PUBLIC_TASK_API_URL=https://$TASK_URL" >> $GITHUB_ENV
+
+    # ─── Build & Deploy Frontend ────────────────────────────
+    - name: Build & Push Frontend
       run: |
         docker build \
-          --build-arg NEXT_PUBLIC_API_URL=${{ env.API_URL }} \
           --build-arg NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
           --build-arg NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
           --build-arg NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }} \
           -t $ACR_NAME.azurecr.io/frontend:${{ github.sha }} ./trademinutes-frontend
         docker push $ACR_NAME.azurecr.io/frontend:${{ github.sha }}
 
-    # ─── Deploy Frontend Container App ────────────────────────────────────
-    - name: Deploy Frontend Container App
+    - name: Deploy Frontend App
       run: |
-        if az containerapp show --name $FRONTEND_APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
-          echo "🔁 Frontend exists. Updating..."
-          az containerapp update \
-            --name $FRONTEND_APP_NAME \
-            --resource-group $RG_NAME \
-            --image $ACR_NAME.azurecr.io/frontend:${{ github.sha }} \
-            --set-env-vars \
-              NEXT_PUBLIC_API_URL=${{ env.API_URL }} \
-              NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
-              NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
-              NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }}
-        else
-          echo "🚀 Creating frontend app..."
-          az containerapp create \
-            --name $FRONTEND_APP_NAME \
-            --resource-group $RG_NAME \
-            --environment $CONTAINERAPP_ENV \
-            --image $ACR_NAME.azurecr.io/frontend:${{ github.sha }} \
-            --target-port 3000 \
-            --ingress external \
-            --registry-server $ACR_NAME.azurecr.io \
-            --env-vars \
-              NEXT_PUBLIC_API_URL=${{ env.API_URL }} \
-              NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
-              NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
-              NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }}
-        fi
+        az containerapp up \
+          --name $FRONTEND_APP_NAME \
+          --resource-group $RG_NAME \
+          --environment $CONTAINERAPP_ENV \
+          --image $ACR_NAME.azurecr.io/frontend:${{ github.sha }} \
+          --target-port 3000 \
+          --ingress external \
+          --registry-server $ACR_NAME.azurecr.io \
+          --env-vars \
+            NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
+            NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
+            NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }}
