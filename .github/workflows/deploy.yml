@@ -55,7 +55,7 @@ jobs:
     - name: Login to ACR
       run: az acr login --name $ACR_NAME
 
-    # ─── Build & Push Backend ─────────────────────────────────────────────
+    # ─── Build & Push Backend API ─────────────────────────────────────────────
     - name: Build & Push users-api
       run: |
         docker build -t $ACR_NAME.azurecr.io/users-api:${{ github.sha }} ./trademinutes-auth
