@@ -61,7 +61,29 @@ jobs:
         docker build -t $ACR_NAME.azurecr.io/users-api:${{ github.sha }} ./trademinutes-auth
         docker push $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
 
-    # ─── Push Secrets Before Creating App ─────────────────────────────────
+    # ─── Create Backend App with Dummy Vars ───────────────────────────────
+    - name: Deploy or Update Backend App
+      run: |
+        if az containerapp show --name $BACKEND_APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
+          echo "🔁 Backend exists. Updating..."
+          az containerapp update \
+            --name $BACKEND_APP_NAME \
+            --resource-group $RG_NAME \
+            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
+        else
+          echo "🚀 Creating backend app with placeholder vars..."
+          az containerapp create \
+            --name $BACKEND_APP_NAME \
+            --resource-group $RG_NAME \
+            --environment $CONTAINERAPP_ENV \
+            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }} \
+            --target-port 8080 \
+            --ingress external \
+            --registry-server $ACR_NAME.azurecr.io \
+            --env-vars PLACEHOLDER=1
+        fi
+
+    # ─── Set Secrets After App Exists ─────────────────────────────────────
     - name: Push secrets to Azure Container App
       run: |
         az containerapp secret set \
@@ -82,43 +104,7 @@ jobs:
             auth-github-id='${{ secrets.AUTH_GITHUB_ID }}' \
             auth-github-secret='${{ secrets.AUTH_GITHUB_SECRET }}'
 
-    # ─── Deploy or Update Backend App ─────────────────────────────────────
-    - name: Deploy or Update Backend App
-      run: |
-        if az containerapp show --name $BACKEND_APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
-          echo "🔁 Backend exists. Updating..."
-          az containerapp update \
-            --name $BACKEND_APP_NAME \
-            --resource-group $RG_NAME \
-            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
-        else
-          echo "🚀 Creating backend app..."
-          az containerapp create \
-            --name $BACKEND_APP_NAME \
-            --resource-group $RG_NAME \
-            --environment $CONTAINERAPP_ENV \
-            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }} \
-            --target-port 8080 \
-            --ingress external \
-            --registry-server $ACR_NAME.azurecr.io \
-            --env-vars \
-              PORT=8080 \
-              MONGO_URI=secretref:mongo-uri \
-              DB_NAME=secretref:db-name \
-              JWT_SECRET=secretref:jwt-secret \
-              JWT_RESET_SECRET=secretref:jwt-reset-secret \
-              SMTP_HOST=secretref:smtp-host \
-              SMTP_PORT=secretref:smtp-port \
-              SMTP_USER=secretref:smtp-user \
-              SMTP_PASS=secretref:smtp-pass \
-              EMAIL_FROM=secretref:email-from \
-              FRONTEND_URL=secretref:frontend-url \
-              AUTH_SECRET=secretref:auth-secret \
-              AUTH_GITHUB_ID=secretref:auth-github-id \
-              AUTH_GITHUB_SECRET=secretref:auth-github-secret
-        fi
-
-    # ─── Inject Env Vars from Secrets to Backend ──────────────────────────
+    # ─── Update Backend Env Vars Using SecretRefs ─────────────────────────
     - name: Inject secret-based env vars into backend
       run: |
         az containerapp update \
