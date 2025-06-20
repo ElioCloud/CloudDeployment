@@ -104,7 +104,7 @@ jobs:
     # ─── Build & Push Task API ──────────────────────────────
     - name: Build & Push Task API
       run: |
-        docker build -t $ACR_NAME.azurecr.io/task-api:${{ github.sha }} ./trademinutes-task
+        docker build -t $ACR_NAME.azurecr.io/task-api:${{ github.sha }} ./trademinutes-task-core
         docker push $ACR_NAME.azurecr.io/task-api:${{ github.sha }}
 
     - name: Deploy Task API
