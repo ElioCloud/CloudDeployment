@@ -1,0 +1,193 @@
+name: Build & Deploy to Azure Container Apps
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  RG_NAME: TradeMinutes-RG2
+  LOCATION: eastus
+  ACR_NAME: trademinutesacr2
+  CONTAINERAPP_ENV: trademinutes-env2
+  BACKEND_APP_NAME: trademinutes-users-api
+  FRONTEND_APP_NAME: trademinutes-frontend
+
+  # Public API URLs (safe to expose)
+  NEXT_PUBLIC_AUTH_API_URL: ${{ vars.NEXT_PUBLIC_AUTH_API_URL }}
+  NEXT_PUBLIC_PROFILE_API_URL: ${{ vars.NEXT_PUBLIC_PROFILE_API_URL }}
+  NEXT_PUBLIC_TASK_API_URL: ${{ vars.NEXT_PUBLIC_TASK_API_URL }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+    - name: Ensure Resource Group exists
+      run: |
+        az group show --name $RG_NAME || az group create --name $RG_NAME --location $LOCATION
+
+    - name: Create ACR if not exists
+      run: |
+        az acr show --name $ACR_NAME --resource-group $RG_NAME || \
+        az acr create --resource-group $RG_NAME --name $ACR_NAME --sku Basic --admin-enabled true
+
+    - name: Create Container App Env if not exists
+      run: |
+        az containerapp env show --name $CONTAINERAPP_ENV --resource-group $RG_NAME || \
+        az containerapp env create \
+          --name $CONTAINERAPP_ENV \
+          --resource-group $RG_NAME \
+          --location $LOCATION
+
+    - name: Login to ACR
+      run: az acr login --name $ACR_NAME
+
+    # ─── Build & Push Backend ─────────────────────────────────────────────
+    - name: Build & Push users-api
+      run: |
+        docker build -t $ACR_NAME.azurecr.io/users-api:${{ github.sha }} ./trademinutes-auth
+        docker push $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
+
+    # ─── Deploy or Update Backend App ─────────────────────────────────────
+    - name: Deploy or Update Backend App
+      run: |
+        if az containerapp show --name $BACKEND_APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
+          echo "🔁 Backend exists. Updating..."
+          az containerapp update \
+            --name $BACKEND_APP_NAME \
+            --resource-group $RG_NAME \
+            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
+        else
+          echo "🚀 Creating backend app..."
+          az containerapp create \
+            --name $BACKEND_APP_NAME \
+            --resource-group $RG_NAME \
+            --environment $CONTAINERAPP_ENV \
+            --image $ACR_NAME.azurecr.io/users-api:${{ github.sha }} \
+            --target-port 8080 \
+            --ingress external \
+            --registry-server $ACR_NAME.azurecr.io \
+            --env-vars \
+              PORT=8080 \
+              MONGO_URI=secretref:mongo-uri \
+              DB_NAME=secretref:db-name \
+              JWT_SECRET=secretref:jwt-secret \
+              JWT_RESET_SECRET=secretref:jwt-reset-secret \
+              SMTP_HOST=secretref:smtp-host \
+              SMTP_PORT=secretref:smtp-port \
+              SMTP_USER=secretref:smtp-user \
+              SMTP_PASS=secretref:smtp-pass \
+              EMAIL_FROM=secretref:email-from \
+              FRONTEND_URL=secretref:frontend-url \
+              AUTH_SECRET=secretref:auth-secret \
+              AUTH_GITHUB_ID=secretref:auth-github-id \
+              AUTH_GITHUB_SECRET=secretref:auth-github-secret
+
+    # ─── Push Secrets to Azure Container App ──────────────────────────────
+    - name: Push secrets to Azure Container App
+      run: |
+        az containerapp secret set \
+          --name $BACKEND_APP_NAME \
+          --resource-group $RG_NAME \
+          --secrets \
+            mongo-uri='${{ secrets.MONGO_URI }}' \
+            db-name='${{ secrets.DB_NAME }}' \
+            jwt-secret='${{ secrets.JWT_SECRET }}' \
+            jwt-reset-secret='${{ secrets.JWT_RESET_SECRET }}' \
+            smtp-host='${{ secrets.SMTP_HOST }}' \
+            smtp-port='${{ secrets.SMTP_PORT }}' \
+            smtp-user='${{ secrets.SMTP_USER }}' \
+            smtp-pass='${{ secrets.SMTP_PASS }}' \
+            email-from='${{ secrets.EMAIL_FROM }}' \
+            frontend-url='${{ secrets.FRONTEND_URL }}' \
+            auth-secret='${{ secrets.AUTH_SECRET }}' \
+            auth-github-id='${{ secrets.AUTH_GITHUB_ID }}' \
+            auth-github-secret='${{ secrets.AUTH_GITHUB_SECRET }}'
+
+    # ─── Inject Secret-based Env Vars into Backend ────────────────────────
+    - name: Inject secret-based env vars into backend
+      run: |
+        az containerapp update \
+          --name $BACKEND_APP_NAME \
+          --resource-group $RG_NAME \
+          --set-env-vars \
+            PORT=8080 \
+            MONGO_URI=secretref:mongo-uri \
+            DB_NAME=secretref:db-name \
+            JWT_SECRET=secretref:jwt-secret \
+            JWT_RESET_SECRET=secretref:jwt-reset-secret \
+            SMTP_HOST=secretref:smtp-host \
+            SMTP_PORT=secretref:smtp-port \
+            SMTP_USER=secretref:smtp-user \
+            SMTP_PASS=secretref:smtp-pass \
+            EMAIL_FROM=secretref:email-from \
+            FRONTEND_URL=secretref:frontend-url \
+            AUTH_SECRET=secretref:auth-secret \
+            AUTH_GITHUB_ID=secretref:auth-github-id \
+            AUTH_GITHUB_SECRET=secretref:auth-github-secret
+
+    # ─── Fetch Backend URL for Frontend ───────────────────────────────────
+    - name: Get backend URL
+      id: backend
+      run: |
+        BACKEND_URL=$(az containerapp show \
+          --name $BACKEND_APP_NAME \
+          --resource-group $RG_NAME \
+          --query properties.configuration.ingress.fqdn -o tsv)
+        echo "API_URL=https://$BACKEND_URL" >> $GITHUB_ENV
+        echo "::notice title=Backend API URL::https://$BACKEND_URL"
+
+    # ─── Build & Push Frontend ────────────────────────────────────────────
+    - name: Build & Push frontend
+      run: |
+        docker build \
+          --build-arg NEXT_PUBLIC_API_URL=${{ env.API_URL }} \
+          --build-arg NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
+          --build-arg NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
+          --build-arg NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }} \
+          -t $ACR_NAME.azurecr.io/frontend:${{ github.sha }} ./trademinutes-frontend
+        docker push $ACR_NAME.azurecr.io/frontend:${{ github.sha }}
+
+    # ─── Deploy Frontend Container App ────────────────────────────────────
+    - name: Deploy Frontend Container App
+      run: |
+        if az containerapp show --name $FRONTEND_APP_NAME --resource-group $RG_NAME >/dev/null 2>&1; then
+          echo "🔁 Frontend exists. Updating..."
+          az containerapp update \
+            --name $FRONTEND_APP_NAME \
+            --resource-group $RG_NAME \
+            --image $ACR_NAME.azurecr.io/frontend:${{ github.sha }} \
+            --set-env-vars \
+              NEXT_PUBLIC_API_URL=${{ env.API_URL }} \
+              NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
+              NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
+              NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }}
+        else
+          echo "🚀 Creating frontend app..."
+          az containerapp create \
+            --name $FRONTEND_APP_NAME \
+            --resource-group $RG_NAME \
+            --environment $CONTAINERAPP_ENV \
+            --image $ACR_NAME.azurecr.io/frontend:${{ github.sha }} \
+            --target-port 3000 \
+            --ingress external \
+            --registry-server $ACR_NAME.azurecr.io \
+            --env-vars \
+              NEXT_PUBLIC_API_URL=${{ env.API_URL }} \
+              NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
+              NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
+              NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }}
