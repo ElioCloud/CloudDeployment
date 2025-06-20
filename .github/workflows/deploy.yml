@@ -16,7 +16,6 @@ env:
   BACKEND_APP_NAME: trademinutes-users-api
   FRONTEND_APP_NAME: trademinutes-frontend
 
-  
   NEXT_PUBLIC_AUTH_API_URL: ${{ vars.NEXT_PUBLIC_AUTH_API_URL }}
   NEXT_PUBLIC_PROFILE_API_URL: ${{ vars.NEXT_PUBLIC_PROFILE_API_URL }}
   NEXT_PUBLIC_TASK_API_URL: ${{ vars.NEXT_PUBLIC_TASK_API_URL }}
@@ -56,11 +55,32 @@ jobs:
     - name: Login to ACR
       run: az acr login --name $ACR_NAME
 
-    # ─── Build & Push Backend API ─────────────────────────────────────────────
+    # ─── Build & Push Backend ─────────────────────────────────────────────
     - name: Build & Push users-api
       run: |
         docker build -t $ACR_NAME.azurecr.io/users-api:${{ github.sha }} ./trademinutes-auth
         docker push $ACR_NAME.azurecr.io/users-api:${{ github.sha }}
+
+    # ─── Push Secrets Before Creating App ─────────────────────────────────
+    - name: Push secrets to Azure Container App
+      run: |
+        az containerapp secret set \
+          --name $BACKEND_APP_NAME \
+          --resource-group $RG_NAME \
+          --secrets \
+            mongo-uri='${{ secrets.MONGO_URI }}' \
+            db-name='${{ secrets.DB_NAME }}' \
+            jwt-secret='${{ secrets.JWT_SECRET }}' \
+            jwt-reset-secret='${{ secrets.JWT_RESET_SECRET }}' \
+            smtp-host='${{ secrets.SMTP_HOST }}' \
+            smtp-port='${{ secrets.SMTP_PORT }}' \
+            smtp-user='${{ secrets.SMTP_USER }}' \
+            smtp-pass='${{ secrets.SMTP_PASS }}' \
+            email-from='${{ secrets.EMAIL_FROM }}' \
+            frontend-url='${{ secrets.FRONTEND_URL }}' \
+            auth-secret='${{ secrets.AUTH_SECRET }}' \
+            auth-github-id='${{ secrets.AUTH_GITHUB_ID }}' \
+            auth-github-secret='${{ secrets.AUTH_GITHUB_SECRET }}'
 
     # ─── Deploy or Update Backend App ─────────────────────────────────────
     - name: Deploy or Update Backend App
@@ -96,30 +116,9 @@ jobs:
               AUTH_SECRET=secretref:auth-secret \
               AUTH_GITHUB_ID=secretref:auth-github-id \
               AUTH_GITHUB_SECRET=secretref:auth-github-secret
-        fi   # ⬅️ add this
+        fi
 
-    # ─── Push Secrets to Azure Container App ──────────────────────────────
-    - name: Push secrets to Azure Container App
-      run: |
-        az containerapp secret set \
-          --name $BACKEND_APP_NAME \
-          --resource-group $RG_NAME \
-          --secrets \
-            mongo-uri='${{ secrets.MONGO_URI }}' \
-            db-name='${{ secrets.DB_NAME }}' \
-            jwt-secret='${{ secrets.JWT_SECRET }}' \
-            jwt-reset-secret='${{ secrets.JWT_RESET_SECRET }}' \
-            smtp-host='${{ secrets.SMTP_HOST }}' \
-            smtp-port='${{ secrets.SMTP_PORT }}' \
-            smtp-user='${{ secrets.SMTP_USER }}' \
-            smtp-pass='${{ secrets.SMTP_PASS }}' \
-            email-from='${{ secrets.EMAIL_FROM }}' \
-            frontend-url='${{ secrets.FRONTEND_URL }}' \
-            auth-secret='${{ secrets.AUTH_SECRET }}' \
-            auth-github-id='${{ secrets.AUTH_GITHUB_ID }}' \
-            auth-github-secret='${{ secrets.AUTH_GITHUB_SECRET }}'
-
-    # ─── Inject Secret-based Env Vars into Backend ────────────────────────
+    # ─── Inject Env Vars from Secrets to Backend ──────────────────────────
     - name: Inject secret-based env vars into backend
       run: |
         az containerapp update \
@@ -192,4 +191,4 @@ jobs:
               NEXT_PUBLIC_AUTH_API_URL=${{ env.NEXT_PUBLIC_AUTH_API_URL }} \
               NEXT_PUBLIC_PROFILE_API_URL=${{ env.NEXT_PUBLIC_PROFILE_API_URL }} \
               NEXT_PUBLIC_TASK_API_URL=${{ env.NEXT_PUBLIC_TASK_API_URL }}
-        fi   # ⬅️ add this
+        fi
