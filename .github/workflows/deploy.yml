@@ -96,6 +96,7 @@ jobs:
               AUTH_SECRET=secretref:auth-secret \
               AUTH_GITHUB_ID=secretref:auth-github-id \
               AUTH_GITHUB_SECRET=secretref:auth-github-secret
+        fi   # ⬅️ add this
 
     # ─── Push Secrets to Azure Container App ──────────────────────────────
     - name: Push secrets to Azure Container App
